@@ -2,7 +2,7 @@ version: '2'
 services:
   client:
     container_name: neovpn-client
-    image: neovpn-test
+    build: ./image
     cap_add:
       - NET_ADMIN
     volumes:
@@ -14,7 +14,7 @@ services:
     command: /client
   server:
     container_name: neovpn-server
-    image: neovpn-test
+    build: ./image
     cap_add:
       - NET_ADMIN
     volumes:
@@ -25,7 +25,7 @@ services:
     command: /server
   target:
     container_name: neovpn-target
-    image: neovpn-test
+    build: ./image
     networks:
       - net2
 networks:

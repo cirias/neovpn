@@ -21,14 +21,16 @@ type Router struct {
 	ipsMutex   sync.RWMutex
 	tun        *tun.Tun
 	ipPool     *IPPool
+	ipNet      *net.IPNet
 	nodes      map[[4]byte]*Node
 	ips        map[string]net.IP // map[id]ip
 }
 
-func NewRouter(ip net.IP, count uint32, tun *tun.Tun) *Router {
+func NewRouter(ip net.IP, ipNet *net.IPNet, tun *tun.Tun) *Router {
 	r := &Router{
 		tun:    tun,
-		ipPool: NewIPPool(ip, count),
+		ipPool: NewIPPool(ip, ipNet),
+		ipNet:  ipNet,
 		nodes:  make(map[[4]byte]*Node),
 		ips:    make(map[string]net.IP),
 	}
@@ -112,11 +114,16 @@ func (r *Router) handleIPRequest(n *Node, id []byte) error {
 	r.nodes[ip4] = n
 	r.nodesMutex.Unlock()
 
+	var payload [12]byte
+	copy(payload[:4], ip)
+	copy(payload[4:8], r.ipNet.IP)
+	copy(payload[8:12], r.ipNet.Mask)
+
 	return n.Send(&tunnel.Pack{
 		Header: &tunnel.Header{
 			Type: tunnel.IP_RESPONSE,
 		},
-		Payload: ip,
+		Payload: payload[:],
 	})
 }
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 
 	"github.com/cirias/neovpn/tun"
 	"github.com/cirias/neovpn/tunnel"
@@ -14,7 +15,7 @@ func main() {
 	psk := "psk"
 	raddr := "server:9606"
 
-	t, err := tun.NewTUN("")
+	t, err := tun.NewTUN("", "./up.sh", "./down.sh")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -78,8 +79,13 @@ func runConn(id string, c *tunnel.Conn, t *tun.Tun) error {
 
 		switch pack.Header.Type {
 		case tunnel.IP_RESPONSE:
-			log.Println("receive IP", pack.Payload)
-			t.Setup(pack.Payload)
+			ip := net.IP(pack.Payload[0:4])
+			ipNet := &net.IPNet{
+				IP:   pack.Payload[4:8],
+				Mask: pack.Payload[8:12],
+			}
+			log.Println("receive IP", ip, ipNet)
+			t.Up(ip, ipNet)
 		case tunnel.IP_PACKET:
 			log.Println("receive packet", pack.Payload)
 			if _, err := t.Write(pack.Payload); err != nil {

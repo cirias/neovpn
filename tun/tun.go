@@ -2,6 +2,7 @@ package tun
 
 import (
 	"errors"
+	"net"
 	"os"
 	"os/exec"
 )
@@ -58,12 +59,7 @@ func (ifce *Tun) Close() (err error) {
 	return ifce.file.Close()
 }
 
-func (ifce *Tun) Up() (err error) {
-	cmd := exec.Command(ifce.upScript)
-	return cmd.Wait()
-}
-
-func (ifce *Tun) Down() (err error) {
-	cmd := exec.Command(ifce.downScript)
+func (ifce *Tun) Up(ip net.IP, ipNet *net.IPNet) (err error) {
+	cmd := exec.Command(ifce.upScript, ifce.name, ip.String(), ipNet.String())
 	return cmd.Wait()
 }

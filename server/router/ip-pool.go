@@ -6,29 +6,31 @@ import (
 	"sync"
 )
 
+var (
+	s = binary.BigEndian.Uint32([]byte{255, 255, 255, 0})
+	m = binary.BigEndian.Uint32([]byte{255, 255, 0, 0})
+	l = binary.BigEndian.Uint32([]byte{255, 0, 0, 0})
+)
+
 type IPPool struct {
-	base  net.IP
-	count uint32
+	start uint32
+	end   uint32
 	used  map[uint32]bool
 	mutex sync.Mutex
 }
 
-// IPAdd returns a copy of start + add.
-// IPAdd(net.IP{192,168,1,1},30) returns net.IP{192.168.1.31}
-func IPAdd(start net.IP, add uint32) net.IP { // IPv4 only
-	start = start.To4()
-	//v := Uvarint([]byte(start))
-	result := make(net.IP, 4)
-	binary.BigEndian.PutUint32(result, binary.BigEndian.Uint32(start)+uint32(add))
-	//PutUint([]byte(result), v+uint64(add))
-	return result
-}
+func NewIPPool(ip net.IP, ipNet *net.IPNet) *IPPool {
+	start := binary.BigEndian.Uint32(ipNet.IP)
+	ones, bits := ipNet.Mask.Size()
+	end := start + 2<<uint(bits-ones-1)
 
-func NewIPPool(base net.IP, count uint32) *IPPool {
+	used := make(map[uint32]bool)
+	used[binary.BigEndian.Uint32(ip)] = true
+
 	return &IPPool{
-		base:  base,
-		count: count,
-		used:  make(map[uint32]bool),
+		start: start,
+		end:   end,
+		used:  used,
 	}
 }
 
@@ -36,11 +38,21 @@ func (p *IPPool) Get() net.IP {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	for i := uint32(1); i <= p.count; i++ {
-		if _, ok := p.used[i]; !ok {
-			p.used[i] = true
-			return IPAdd(p.base, i)
+	for i := p.start; i <= p.end; i++ {
+		if _, ok := p.used[i]; ok {
+			continue
 		}
+
+		if (i|s) == s ||
+			(i|m) == m ||
+			(i|l) == l {
+			continue
+		}
+
+		p.used[i] = true
+		result := make(net.IP, 4)
+		binary.BigEndian.PutUint32(result, i)
+		return result
 	}
 
 	return nil
@@ -50,6 +62,6 @@ func (p *IPPool) Put(ip net.IP) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	i := binary.BigEndian.Uint32(ip) - binary.BigEndian.Uint32(p.base)
+	i := binary.BigEndian.Uint32(ip)
 	p.used[i] = false
 }

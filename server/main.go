@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"net"
 
 	"github.com/cirias/neovpn/server/router"
 	"github.com/cirias/neovpn/tun"
@@ -14,12 +15,19 @@ func main() {
 		log.Fatal(err)
 	}
 
-	t, err := tun.NewTUN("")
+	t, err := tun.NewTUN("", "./up.sh", "./down.sh")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	r := router.NewRouter([]byte{10, 10, 10, 1}, 2, t)
+	cidr := "10.10.10.1/30"
+	ip, ipNet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	r := router.NewRouter(ip, ipNet, t)
+	t.Up(ip, ipNet)
 
 	for {
 		c, err := l.Accept()
