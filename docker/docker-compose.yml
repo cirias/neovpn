@@ -1,0 +1,35 @@
+version: '2'
+services:
+  client:
+    container_name: neovpn-client
+    image: neovpn-test
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - ../client/client:/client
+    networks:
+      - net1
+    environment:
+      - GODEBUG=netdns=cgo+1
+    command: /client
+  server:
+    container_name: neovpn-server
+    image: neovpn-test
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - ../server/server:/server
+    networks:
+      - net1
+      - net2
+    command: /server
+  target:
+    container_name: neovpn-target
+    image: neovpn-test
+    networks:
+      - net2
+networks:
+  net1:
+    driver: bridge
+  net2:
+    driver: bridge
