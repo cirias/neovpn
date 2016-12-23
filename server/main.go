@@ -10,7 +10,10 @@ import (
 )
 
 func main() {
-	l, err := tunnel.Listen("psk unused", ":9606")
+	psk := "psk"
+	laddr := ":9606"
+
+	l, err := tunnel.Listen(psk, laddr)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
 	"log"
@@ -21,6 +22,7 @@ type Listener struct {
 type Conn struct {
 	psk string
 	net.Conn
+	crypter *crypter
 }
 
 type Header struct {
@@ -48,7 +50,7 @@ func (l *Listener) Accept() (*Conn, error) {
 		return nil, err
 	}
 
-	return &Conn{l.psk, conn}, nil
+	return newConn(l.psk, conn)
 }
 
 func Dial(psk, raddr string) (*Conn, error) {
@@ -58,30 +60,76 @@ func Dial(psk, raddr string) (*Conn, error) {
 		return nil, err
 	}
 
-	return &Conn{psk, conn}, nil
+	return newConn(psk, conn)
+}
+
+func newConn(psk string, c net.Conn) (*Conn, error) {
+	crypter, err := newCrypter([]byte(psk))
+	if err != nil {
+		return nil, err
+	}
+
+	return &Conn{psk, c, crypter}, nil
 }
 
 func (c *Conn) Receive() (*Pack, error) {
-	h := &Header{}
-	if err := binary.Read(c, binary.BigEndian, h); err != nil {
+	// IV
+	iv := make([]byte, IVSize)
+	if _, err := io.ReadFull(c, iv); err != nil {
 		return nil, err
 	}
 
-	p := make([]byte, h.Len)
-	if _, err := io.ReadFull(c, p); err != nil {
+	dec := newDecrypter(c.crypter, iv)
+
+	// Header
+	h := &Header{}
+	eh := make([]byte, binary.Size(h))
+	if _, err := io.ReadFull(c, eh); err != nil {
 		return nil, err
 	}
+
+	rh := make([]byte, len(eh))
+	dec.Decrypt(rh, eh)
+
+	if err := binary.Read(bytes.NewBuffer(rh), binary.BigEndian, h); err != nil {
+		return nil, err
+	}
+
+	// Payload
+	ep := make([]byte, h.Len)
+	if _, err := io.ReadFull(c, ep); err != nil {
+		return nil, err
+	}
+
+	p := make([]byte, len(ep))
+	dec.Decrypt(p, ep)
 
 	return &Pack{h, p}, nil
 }
 
 func (c *Conn) Send(p *Pack) error {
-	p.Header.Len = int16(len(p.Payload))
-	if err := binary.Write(c, binary.BigEndian, p.Header); err != nil {
+	iv, err := newIV()
+	if err != nil {
 		return err
 	}
 
-	if _, err := c.Write(p.Payload); err != nil {
+	enc := newEncrypter(c.crypter, iv)
+
+	var buf bytes.Buffer
+
+	p.Header.Len = int16(len(p.Payload))
+	if err := binary.Write(&buf, binary.BigEndian, p.Header); err != nil {
+		return err
+	}
+
+	if _, err := buf.Write(p.Payload); err != nil {
+		return err
+	}
+
+	ep := make([]byte, buf.Len())
+	enc.Encrypt(ep, buf.Bytes())
+
+	if _, err := c.Write(bytes.Join([][]byte{iv, ep}, nil)); err != nil {
 		return err
 	}
 
