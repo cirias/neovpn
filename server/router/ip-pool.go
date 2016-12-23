@@ -7,9 +7,9 @@ import (
 )
 
 var (
-	s = binary.BigEndian.Uint32([]byte{255, 255, 255, 0})
-	m = binary.BigEndian.Uint32([]byte{255, 255, 0, 0})
-	l = binary.BigEndian.Uint32([]byte{255, 0, 0, 0})
+	s uint32 = 256
+	m uint32 = 256 * 256
+	l uint32 = 256 * 256 * 256
 )
 
 type IPPool struct {
@@ -25,7 +25,7 @@ func NewIPPool(ip net.IP, ipNet *net.IPNet) *IPPool {
 	end := start + 2<<uint(bits-ones-1)
 
 	used := make(map[uint32]bool)
-	used[binary.BigEndian.Uint32(ip)] = true
+	used[binary.BigEndian.Uint32(ip.To4())] = true
 
 	return &IPPool{
 		start: start,
@@ -43,9 +43,9 @@ func (p *IPPool) Get() net.IP {
 			continue
 		}
 
-		if (i|s) == s ||
-			(i|m) == m ||
-			(i|l) == l {
+		if (i%s) == 0 ||
+			(i%m) == 0 ||
+			(i%l) == 0 {
 			continue
 		}
 

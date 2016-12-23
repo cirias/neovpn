@@ -15,7 +15,7 @@ func main() {
 	psk := "psk"
 	raddr := "server:9606"
 
-	t, err := tun.NewTUN("", "./up.sh", "./down.sh")
+	t, err := tun.NewTUN("", "/up.sh", "/down.sh")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -85,7 +85,13 @@ func runConn(id string, c *tunnel.Conn, t *tun.Tun) error {
 				Mask: pack.Payload[8:12],
 			}
 			log.Println("receive IP", ip, ipNet)
-			t.Up(ip, ipNet)
+			output, err := t.Up(ip, ipNet)
+			if err != nil {
+				log.Println("tun up:", err)
+			} else if len(output) != 0 {
+				log.Println("tun up:", string(output))
+			}
+
 		case tunnel.IP_PACKET:
 			log.Println("receive packet", pack.Payload)
 			if _, err := t.Write(pack.Payload); err != nil {

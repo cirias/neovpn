@@ -16,13 +16,16 @@ type Tun struct {
 	downScript string
 }
 
-func NewTUN(ifName, upScript, downScript string) (ifce *Tun, err error) {
-	ifce, err = newTUN(ifName)
+func NewTUN(ifName, upScript, downScript string) (*Tun, error) {
+	ifce, err := newTUN(ifName)
 	if err != nil {
-		return
+		return nil, err
 	}
 
-	return
+	ifce.upScript = upScript
+	ifce.downScript = downScript
+
+	return ifce, nil
 }
 
 func (ifce *Tun) Name() string {
@@ -48,7 +51,7 @@ func (ifce *Tun) Read() ([]byte, error) {
 
 		// only keep ipv4 packet
 		if (p[0] >> 4) == 0x04 {
-			return p, nil
+			return p[:n], nil
 		}
 
 		// TODO check packet length
@@ -59,7 +62,7 @@ func (ifce *Tun) Close() (err error) {
 	return ifce.file.Close()
 }
 
-func (ifce *Tun) Up(ip net.IP, ipNet *net.IPNet) (err error) {
+func (ifce *Tun) Up(ip net.IP, ipNet *net.IPNet) ([]byte, error) {
 	cmd := exec.Command(ifce.upScript, ifce.name, ip.String(), ipNet.String())
-	return cmd.Wait()
+	return cmd.CombinedOutput()
 }

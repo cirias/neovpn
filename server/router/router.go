@@ -99,7 +99,7 @@ func (r *Router) handleIPRequest(n *Node, id []byte) error {
 	ip, ok := r.ips[string(id)]
 	r.ipsMutex.RUnlock()
 	if !ok {
-		ip = r.ipPool.Get()
+		ip = r.ipPool.Get().To4()
 
 		r.ipsMutex.RLock()
 		r.ips[string(id)] = ip

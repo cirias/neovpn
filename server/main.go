@@ -15,7 +15,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	t, err := tun.NewTUN("", "./up.sh", "./down.sh")
+	t, err := tun.NewTUN("", "/up.sh", "/down.sh")
 	if err != nil {
 		log.Fatal(err)
 	}
