@@ -1,6 +1,7 @@
 TODO
 -
 
-1. Client Retry with Timeout
-2. Encryption
-3. TUN for macOS
+1. client retry with timeout
+2. test
+3. tun for macos
+4. kcp support
