@@ -60,7 +60,8 @@ func (r *Router) Take(c *tunnel.Conn) {
 		delete(r.nodes, n.IP)
 		r.nodesMutex.Unlock()
 
-		r.ipPool.Put(n.IP[:])
+		// TODO put ip back only when client ask to
+		// r.ipPool.Put(n.IP[:])
 	}()
 
 RECEIVE_LOOP:
@@ -90,19 +91,20 @@ RECEIVE_LOOP:
 }
 
 func (r *Router) handleIPRequest(n *Node, id []byte) error {
-	log.Println("receive id", id)
+	sID := string(id)
+	log.Println("receive id", sID)
 	if n.IP != [4]byte{} {
 		return errors.New("already has an IP: " + fmt.Sprint(n.IP))
 	}
 
 	r.ipsMutex.RLock()
-	ip, ok := r.ips[string(id)]
+	ip, ok := r.ips[sID]
 	r.ipsMutex.RUnlock()
 	if !ok {
 		ip = r.ipPool.Get().To4()
 
 		r.ipsMutex.RLock()
-		r.ips[string(id)] = ip
+		r.ips[sID] = ip
 		r.ipsMutex.RUnlock()
 	}
 
@@ -128,7 +130,7 @@ func (r *Router) handleIPRequest(n *Node, id []byte) error {
 }
 
 func (r *Router) handleIPPacket(n *Node, packet []byte) error {
-	log.Println("receive packet", packet)
+	// log.Println("receive packet", packet)
 	if _, err := r.tun.Write(packet); err != nil {
 		return err
 	}

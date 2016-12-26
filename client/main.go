@@ -2,20 +2,27 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"net"
+	"time"
 
 	"github.com/cirias/neovpn/tun"
 	"github.com/cirias/neovpn/tunnel"
 )
 
 func main() {
-	id := "id"
-	psk := "psk"
-	raddr := "server:9606"
+	var id, psk, raddr, upScript, downScript string
 
-	t, err := tun.NewTUN("", "/up.sh", "/down.sh")
+	flag.StringVar(&id, "id", "", "client ID")
+	flag.StringVar(&psk, "psk", "", "pre-shared key")
+	flag.StringVar(&raddr, "raddr", ":9606", "remote server address")
+	flag.StringVar(&upScript, "up-script", "./up.sh", "up hook script path")
+	flag.StringVar(&downScript, "down-script", "./down.sh", "down hook script path")
+	flag.Parse()
+
+	t, err := tun.NewTUN("", upScript, downScript)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -24,14 +31,17 @@ func main() {
 
 	go func() {
 		for {
+			log.Println("dial:", raddr)
 			c, err = tunnel.Dial(psk, raddr)
 			if err != nil {
 				log.Println(err)
+				time.Sleep(2 * time.Second)
 				continue
 			}
 
 			if err := runConn(id, c, t); err != nil {
 				log.Println(err)
+				time.Sleep(2 * time.Second)
 				continue
 			}
 		}
@@ -93,7 +103,7 @@ func runConn(id string, c *tunnel.Conn, t *tun.Tun) error {
 			}
 
 		case tunnel.IP_PACKET:
-			log.Println("receive packet", pack.Payload)
+			// log.Println("receive packet", pack.Payload)
 			if _, err := t.Write(pack.Payload); err != nil {
 				return err
 			}

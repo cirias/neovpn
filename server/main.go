@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"net"
 
@@ -10,8 +11,14 @@ import (
 )
 
 func main() {
-	psk := "psk"
-	laddr := ":9606"
+	var cidr, psk, laddr, upScript, downScript string
+
+	flag.StringVar(&cidr, "cidr", "10.10.10.1/30", "vpn cidr")
+	flag.StringVar(&psk, "psk", "", "pre-shared key")
+	flag.StringVar(&laddr, "laddr", ":9606", "listening address")
+	flag.StringVar(&upScript, "up-script", "./up.sh", "up hook script path")
+	flag.StringVar(&downScript, "down-script", "./down.sh", "down hook script path")
+	flag.Parse()
 
 	l, err := tunnel.Listen(psk, laddr)
 	if err != nil {
@@ -23,7 +30,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	cidr := "10.10.10.1/30"
 	ip, ipNet, err := net.ParseCIDR(cidr)
 	if err != nil {
 		log.Fatal(err)

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
-	"log"
 	"net"
 )
 
@@ -54,7 +53,6 @@ func (l *Listener) Accept() (*Conn, error) {
 }
 
 func Dial(psk, raddr string) (*Conn, error) {
-	log.Println("Dial", raddr)
 	conn, err := net.Dial("tcp", raddr)
 	if err != nil {
 		return nil, err
