@@ -25,7 +25,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	t, err := tun.NewTUN("", "/up.sh", "/down.sh")
+	t, err := tun.NewTUN("", upScript, downScript)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -35,8 +35,14 @@ func main() {
 		log.Fatal(err)
 	}
 
+	output, err := t.Up(ip, ipNet)
+	if err != nil {
+		log.Fatalln("tun up:", err)
+	} else if len(output) != 0 {
+		log.Println("tun up:", string(output))
+	}
+
 	r := router.NewRouter(ip, ipNet, t)
-	t.Up(ip, ipNet)
 
 	for {
 		c, err := l.Accept()
