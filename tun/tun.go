@@ -2,12 +2,19 @@ package tun
 
 import (
 	"errors"
+	"io"
 	"net"
 	"os"
 	"os/exec"
 )
 
 const MAX_PACKET_SIZE = 2048
+
+type Interface interface {
+	io.ReadWriteCloser
+	Up(net.IP, *net.IPNet) ([]byte, error)
+	Down(net.IP, *net.IPNet) ([]byte, error)
+}
 
 type Tun struct {
 	file       *os.File
@@ -37,21 +44,20 @@ func (ifce *Tun) Write(p []byte) (n int, err error) {
 	return
 }
 
-func (ifce *Tun) Read() ([]byte, error) {
+func (ifce *Tun) Read(p []byte) (int, error) {
 	for {
-		p := make([]byte, MAX_PACKET_SIZE)
 		n, err := ifce.file.Read(p)
 		if err != nil {
-			return p, err
+			return n, err
 		}
 
-		if n == MAX_PACKET_SIZE {
-			return p, errors.New("tun read: max packet size reached")
+		if n == len(p) {
+			return n, errors.New("tun read: max packet size reached")
 		}
 
 		// only keep ipv4 packet
 		if (p[0] >> 4) == 0x04 {
-			return p[:n], nil
+			return n, nil
 		}
 
 		// TODO check packet length
@@ -65,4 +71,8 @@ func (ifce *Tun) Close() (err error) {
 func (ifce *Tun) Up(ip net.IP, ipNet *net.IPNet) ([]byte, error) {
 	cmd := exec.Command(ifce.upScript, ifce.name, ip.String(), ipNet.String())
 	return cmd.CombinedOutput()
+}
+
+func (ifce *Tun) Down(net.IP, *net.IPNet) ([]byte, error) {
+	return nil, nil
 }

@@ -1,14 +1,30 @@
 package router
 
 import (
+	"bytes"
+	"io"
 	"net"
 	"testing"
 
-	"github.com/cirias/neovpn/server/router"
 	"github.com/cirias/neovpn/tunnel"
 )
 
+type FakeTun struct {
+	c chan struct{}
+	io.Writer
+}
+
+func (t *FakeTun) Read([]byte) (int, error) {
+	<-t.c
+	return 0, nil
+}
+
 func TestRouter(t *testing.T) {
+	psk := "psk"
+	laddr := ":9606"
+	cidr := "10.10.10.1/30"
+	raddr := "127.0.0.1:9606"
+
 	l, err := tunnel.Listen(psk, laddr)
 	if err != nil {
 		t.Fatal(err)
@@ -19,30 +35,35 @@ func TestRouter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r := router.NewRouter(ip, ipNet, t)
+	tun := &FakeTun{
+		c:      make(chan struct{}),
+		Writer: bytes.NewBuffer([]byte{}),
+	}
 
-	cc, err := tunnel.Dial(psk, raddr)
+	r := NewRouter(ip, ipNet, tun)
+
+	cc1, err := tunnel.Dial(psk, raddr)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	sc, err := l.Accept()
+	sc1, err := l.Accept()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	go r.Take(sc)
+	go r.Take(sc1)
 
-	if err := cc.Send(&tunnel.Pack{
+	if err := cc1.Send(&tunnel.Pack{
 		Header: &tunnel.Header{
 			Type: tunnel.IP_REQUEST,
 		},
 		Payload: []byte("client1"),
 	}); err != nil {
-		return err
+		t.Fatal(err)
 	}
 
-	pack, err := cc.Receive()
+	pack, err := cc1.Receive()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,16 +81,28 @@ func TestRouter(t *testing.T) {
 
 	// etc
 
-	if err := cc.Send(&tunnel.Pack{
+	cc2, err := tunnel.Dial(psk, raddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sc2, err := l.Accept()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	go r.Take(sc2)
+
+	if err := cc2.Send(&tunnel.Pack{
 		Header: &tunnel.Header{
 			Type: tunnel.IP_REQUEST,
 		},
 		Payload: []byte("client2"),
 	}); err != nil {
-		return err
+		t.Fatal(err)
 	}
 
-	pack, err := cc.Receive()
+	pack, err = cc2.Receive()
 	if err != nil {
 		t.Fatal(err)
 	}

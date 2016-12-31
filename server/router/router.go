@@ -3,6 +3,7 @@ package router
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"sync"
@@ -19,16 +20,16 @@ type Node struct {
 type Router struct {
 	nodesMutex sync.RWMutex
 	ipsMutex   sync.RWMutex
-	tun        *tun.Tun
+	ifce       io.ReadWriter
 	ipPool     *IPPool
 	ipNet      *net.IPNet
 	nodes      map[[4]byte]*Node
 	ips        map[string]net.IP // map[id]ip
 }
 
-func NewRouter(ip net.IP, ipNet *net.IPNet, tun *tun.Tun) *Router {
+func NewRouter(ip net.IP, ipNet *net.IPNet, ifce io.ReadWriter) *Router {
 	r := &Router{
-		tun:    tun,
+		ifce:   ifce,
 		ipPool: NewIPPool(ip, ipNet),
 		ipNet:  ipNet,
 		nodes:  make(map[[4]byte]*Node),
@@ -37,13 +38,14 @@ func NewRouter(ip net.IP, ipNet *net.IPNet, tun *tun.Tun) *Router {
 
 	go func() {
 		for {
-			ipPacket, err := tun.Read()
+			ipPacket := make([]byte, tun.MAX_PACKET_SIZE)
+			n, err := ifce.Read(ipPacket)
 			if err != nil {
 				log.Println(err)
 				continue
 			}
 
-			if err := r.handleIPPacketFromTun(ipPacket); err != nil {
+			if err := r.handleIPPacketFromTun(ipPacket[:n]); err != nil {
 				log.Println(err)
 			}
 		}
@@ -131,7 +133,7 @@ func (r *Router) handleIPRequest(n *Node, id []byte) error {
 
 func (r *Router) handleIPPacket(n *Node, packet []byte) error {
 	// log.Println("receive packet", packet)
-	if _, err := r.tun.Write(packet); err != nil {
+	if _, err := r.ifce.Write(packet); err != nil {
 		return err
 	}
 

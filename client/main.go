@@ -48,7 +48,8 @@ func main() {
 	}()
 
 	for {
-		ipPacket, err := t.Read()
+		ipPacket := make([]byte, tun.MAX_PACKET_SIZE)
+		n, err := t.Read(ipPacket)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -62,14 +63,14 @@ func main() {
 			Header: &tunnel.Header{
 				Type: tunnel.IP_PACKET,
 			},
-			Payload: ipPacket,
+			Payload: ipPacket[:n],
 		}); err != nil {
 			log.Println(err)
 		}
 	}
 }
 
-func runConn(id string, c *tunnel.Conn, t *tun.Tun) error {
+func runConn(id string, c *tunnel.Conn, i tun.Interface) error {
 	defer c.Close()
 
 	if err := c.Send(&tunnel.Pack{
@@ -95,7 +96,7 @@ func runConn(id string, c *tunnel.Conn, t *tun.Tun) error {
 				Mask: pack.Payload[8:12],
 			}
 			log.Println("receive IP", ip, ipNet)
-			output, err := t.Up(ip, ipNet)
+			output, err := i.Up(ip, ipNet)
 			if err != nil {
 				log.Println("tun up:", err)
 			} else if len(output) != 0 {
@@ -104,7 +105,7 @@ func runConn(id string, c *tunnel.Conn, t *tun.Tun) error {
 
 		case tunnel.IP_PACKET:
 			// log.Println("receive packet", pack.Payload)
-			if _, err := t.Write(pack.Payload); err != nil {
+			if _, err := i.Write(pack.Payload); err != nil {
 				return err
 			}
 		default:
