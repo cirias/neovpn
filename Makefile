@@ -1,3 +1,7 @@
+.PHONY: docker
+docker:
+	cd docker/ && docker-compose up
+
 build:
 	cd server/ && go build
 	cd client/ && go build
