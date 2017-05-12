@@ -7,6 +7,8 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 )
@@ -18,19 +20,23 @@ type conn struct {
 
 func (c *conn) Read(b []byte) (int, error) {
 	nonce := make([]byte, c.gcm.NonceSize())
-	_, err := io.ReadFull(c, nonce)
+	_, err := io.ReadFull(c.TCPConn, nonce)
 	if err != nil {
 		return 0, err
 	}
 
 	var length uint16
-	err = binary.Read(c, binary.BigEndian, length)
+	err = binary.Read(c.TCPConn, binary.BigEndian, &length)
 	if err != nil {
 		return 0, err
 	}
 
+	if len(b) < int(length) {
+		return 0, errors.New("ctcp: insufficient buffer size, need " + fmt.Sprintf("%v", length))
+	}
+
 	cipherbuf := make([]byte, length)
-	_, err = io.ReadFull(c, cipherbuf)
+	_, err = io.ReadFull(c.TCPConn, cipherbuf)
 	if err != nil {
 		return 0, nil
 	}
@@ -53,15 +59,17 @@ func (c *conn) Write(b []byte) (int, error) {
 		return 0, err
 	}
 
-	length := uint16(len(b))
-	err = binary.Read(buf, binary.BigEndian, length)
+	cipherbuf := c.gcm.Seal(nil, nonce, b, nil)
+
+	length := uint16(len(cipherbuf))
+	err = binary.Write(buf, binary.BigEndian, length)
 	if err != nil {
 		return 0, err
 	}
 
-	cipherbuf := c.gcm.Seal(buf.Bytes(), nonce, b, nil)
+	buf.Write(cipherbuf)
 
-	_, err = c.Write(cipherbuf)
+	_, err = c.TCPConn.Write(buf.Bytes())
 
 	return len(b), err
 }
