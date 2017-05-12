@@ -1,4 +1,4 @@
-package ctcp
+package neo
 
 import (
 	"bytes"
