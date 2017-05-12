@@ -6,7 +6,5 @@
 
 ip addr flush dev $1
 ip addr add $2 dev $1
-
 ip link set dev $1 up
-
 ip route add $3 dev $1

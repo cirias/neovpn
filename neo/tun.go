@@ -1,7 +1,7 @@
-package neo
+package main
 
 import "os"
 
-type tun struct {
+type Tun struct {
 	*os.File
 }

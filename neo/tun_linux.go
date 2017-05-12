@@ -1,6 +1,6 @@
 // +build linux
 
-package neo
+package main
 
 import (
 	"os"
@@ -21,7 +21,7 @@ type ifReq struct {
 	pad   [0x28 - 0x10 - 2]byte
 }
 
-func newTun() (ifce *tun, err error) {
+func newTun() (ifce *Tun, err error) {
 	file, err := os.OpenFile("/dev/net/tun", os.O_RDWR, 0)
 	if err != nil {
 		return nil, err
@@ -32,7 +32,7 @@ func newTun() (ifce *tun, err error) {
 		return nil, err
 	}
 
-	ifce = &tun{file}
+	ifce = &Tun{file}
 	return
 }
 

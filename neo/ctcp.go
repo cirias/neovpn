@@ -1,4 +1,4 @@
-package neo
+package main
 
 import (
 	"bytes"
