@@ -11,7 +11,7 @@ func TestReadWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -21,7 +21,7 @@ func TestReadWrite(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		b := make([]byte, 1024)
 		n, err := conn.Read(b)
@@ -39,7 +39,7 @@ func TestReadWrite(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		b := []byte("hello world")
 		n, err := conn.Write(b)
@@ -60,7 +60,7 @@ func TestWriteRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -70,7 +70,7 @@ func TestWriteRead(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		b := []byte("hello world")
 		n, err := conn.Write(b)
@@ -88,7 +88,7 @@ func TestWriteRead(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		b := make([]byte, 1024)
 		n, err := conn.Read(b)

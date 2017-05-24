@@ -2,6 +2,8 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"io"
 	"log"
 	"net"
 	"sync"
@@ -21,49 +23,102 @@ func main() {
 	}
 }
 
-func client(key, address string) {
-	tun, err := newTun()
-	if err != nil {
-		log.Fatalln(err)
-	}
-	defer tun.Close()
+type Client struct {
+	tun  io.ReadWriter
+	conn io.ReadWriter
+	done chan struct{}
+}
 
-	conn, err := Dial(key, address)
-	if err != nil {
-		log.Fatalln(err)
+func newClient(conn, tun io.ReadWriter) *Client {
+	return &Client{
+		tun:  tun,
+		conn: conn,
+		done: make(chan struct{}),
 	}
-	defer conn.Close()
+}
 
+func (c *Client) Close() {
+	close(c.done)
+}
+
+func (c *Client) Run() <-chan error {
+	var wg sync.WaitGroup
+
+	errCh := make(chan error)
+	defer func() {
+		wg.Wait()
+		close(errCh)
+	}()
+
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		b := make([]byte, 65535)
 
 		for {
-			n, err := tun.Read(b)
-			if err != nil {
-				log.Fatalln(err)
+			select {
+			case <-c.done:
+				return
+			default:
 			}
 
-			_, err = conn.Write(b[:n])
+			n, err := c.tun.Read(b)
 			if err != nil {
-				log.Fatalln(err)
+				errCh <- fmt.Errorf("could not read from tun: %v", err)
+			}
+
+			_, err = c.conn.Write(b[:n])
+			if err != nil {
+				errCh <- fmt.Errorf("could not write to conn: %v", err)
 			}
 		}
 	}()
 
-	{
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		b := make([]byte, 65535)
 
 		for {
-			n, err := conn.Read(b)
-			if err != nil {
-				log.Fatalln(err)
+			select {
+			case <-c.done:
+				return
+			default:
 			}
 
-			_, err = tun.Write(b[:n])
+			n, err := c.conn.Read(b)
 			if err != nil {
-				log.Fatalln(err)
+				errCh <- fmt.Errorf("could not read from conn: %v", err)
+			}
+
+			_, err = c.tun.Write(b[:n])
+			if err != nil {
+				errCh <- fmt.Errorf("could not write to tun: %v", err)
 			}
 		}
+	}()
+
+	return errCh
+}
+
+func client(key, address string) {
+	tun, err := newTun()
+	if err != nil {
+		log.Fatalf("could not new tun: %v\n", err)
+	}
+	defer func() { _ = tun.Close() }()
+
+	conn, err := Dial(key, address)
+	if err != nil {
+		log.Fatalf("could not dial to %v@%v: %v\n", key, address, err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	client := newClient(conn, tun)
+	defer client.Close()
+
+	for err := range client.Run() {
+		log.Fatalf("could not run: %v\n", err)
 	}
 }
 
@@ -72,13 +127,13 @@ func server(key, address string) {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	defer tun.Close()
+	defer func() { _ = tun.Close() }()
 
 	ln, err := Listen(key, address)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 
 	conns := make(map[[4]byte]net.Conn)
 	var connsmtx sync.RWMutex
@@ -94,6 +149,14 @@ func server(key, address string) {
 			}
 
 			copy(dst[:], b[16:20])
+
+			if net.IPv4(dst[0], dst[1], dst[2], dst[3]).Equal(net.IPv4bcast) {
+				for _, conn := range conns {
+					if _, err := conn.Write(b[:n]); err != nil {
+						log.Println(err)
+					}
+				}
+			}
 
 			connsmtx.RLock()
 			conn, ok := conns[dst]
@@ -118,7 +181,7 @@ func server(key, address string) {
 		}
 
 		go func() {
-			defer conn.Close()
+			defer func() { _ = conn.Close() }()
 
 			var src [4]byte
 			for {
