@@ -23,25 +23,25 @@ func main() {
 	}
 }
 
-type Client struct {
-	tun  io.ReadWriter
-	conn io.ReadWriter
-	done chan struct{}
+type connector struct {
+	first  io.ReadWriter
+	second io.ReadWriter
+	done   chan struct{}
 }
 
-func newClient(conn, tun io.ReadWriter) *Client {
-	return &Client{
-		tun:  tun,
-		conn: conn,
-		done: make(chan struct{}),
+func newConnector(first, second io.ReadWriter) *connector {
+	return &connector{
+		first:  first,
+		second: second,
+		done:   make(chan struct{}),
 	}
 }
 
-func (c *Client) Close() {
+func (c *connector) Close() {
 	close(c.done)
 }
 
-func (c *Client) Run() <-chan error {
+func (c *connector) Run() <-chan error {
 	var wg sync.WaitGroup
 
 	errCh := make(chan error)
@@ -62,14 +62,14 @@ func (c *Client) Run() <-chan error {
 			default:
 			}
 
-			n, err := c.tun.Read(b)
+			n, err := c.first.Read(b)
 			if err != nil {
-				errCh <- fmt.Errorf("could not read from tun: %v", err)
+				errCh <- fmt.Errorf("could not read from first: %v", err)
 			}
 
-			_, err = c.conn.Write(b[:n])
+			_, err = c.second.Write(b[:n])
 			if err != nil {
-				errCh <- fmt.Errorf("could not write to conn: %v", err)
+				errCh <- fmt.Errorf("could not write to second: %v", err)
 			}
 		}
 	}()
@@ -86,14 +86,14 @@ func (c *Client) Run() <-chan error {
 			default:
 			}
 
-			n, err := c.conn.Read(b)
+			n, err := c.second.Read(b)
 			if err != nil {
-				errCh <- fmt.Errorf("could not read from conn: %v", err)
+				errCh <- fmt.Errorf("could not read from second: %v", err)
 			}
 
-			_, err = c.tun.Write(b[:n])
+			_, err = c.first.Write(b[:n])
 			if err != nil {
-				errCh <- fmt.Errorf("could not write to tun: %v", err)
+				errCh <- fmt.Errorf("could not write to first: %v", err)
 			}
 		}
 	}()
@@ -104,7 +104,7 @@ func (c *Client) Run() <-chan error {
 func client(key, address string) {
 	tun, err := newTun()
 	if err != nil {
-		log.Fatalf("could not new tun: %v\n", err)
+		log.Fatalf("could not new first: %v\n", err)
 	}
 	defer func() { _ = tun.Close() }()
 
@@ -114,10 +114,10 @@ func client(key, address string) {
 	}
 	defer func() { _ = conn.Close() }()
 
-	client := newClient(conn, tun)
-	defer client.Close()
+	c := newConnector(tun, conn)
+	defer c.Close()
 
-	for err := range client.Run() {
+	for err := range c.Run() {
 		log.Fatalf("could not run: %v\n", err)
 	}
 }
