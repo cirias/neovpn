@@ -24,16 +24,16 @@ func main() {
 }
 
 type connector struct {
-	first  io.ReadWriter
-	second io.ReadWriter
-	done   chan struct{}
+	lhs  io.ReadWriter
+	rhs  io.ReadWriter
+	done chan struct{}
 }
 
-func newConnector(first, second io.ReadWriter) *connector {
+func newConnector(lhs, rhs io.ReadWriter) *connector {
 	return &connector{
-		first:  first,
-		second: second,
-		done:   make(chan struct{}),
+		lhs:  lhs,
+		rhs:  rhs,
+		done: make(chan struct{}),
 	}
 }
 
@@ -62,14 +62,14 @@ func (c *connector) Run() <-chan error {
 			default:
 			}
 
-			n, err := c.first.Read(b)
+			n, err := c.lhs.Read(b)
 			if err != nil {
-				errCh <- fmt.Errorf("could not read from first: %v", err)
+				errCh <- fmt.Errorf("could not read from lhs: %v", err)
 			}
 
-			_, err = c.second.Write(b[:n])
+			_, err = c.rhs.Write(b[:n])
 			if err != nil {
-				errCh <- fmt.Errorf("could not write to second: %v", err)
+				errCh <- fmt.Errorf("could not write to rhs: %v", err)
 			}
 		}
 	}()
@@ -86,14 +86,14 @@ func (c *connector) Run() <-chan error {
 			default:
 			}
 
-			n, err := c.second.Read(b)
+			n, err := c.rhs.Read(b)
 			if err != nil {
-				errCh <- fmt.Errorf("could not read from second: %v", err)
+				errCh <- fmt.Errorf("could not read from rhs: %v", err)
 			}
 
-			_, err = c.first.Write(b[:n])
+			_, err = c.lhs.Write(b[:n])
 			if err != nil {
-				errCh <- fmt.Errorf("could not write to first: %v", err)
+				errCh <- fmt.Errorf("could not write to lhs: %v", err)
 			}
 		}
 	}()
@@ -104,7 +104,7 @@ func (c *connector) Run() <-chan error {
 func client(key, address string) {
 	tun, err := newTun()
 	if err != nil {
-		log.Fatalf("could not new first: %v\n", err)
+		log.Fatalf("could not new tun: %v\n", err)
 	}
 	defer func() { _ = tun.Close() }()
 
