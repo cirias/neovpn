@@ -2,6 +2,11 @@ package main
 
 import "os"
 
-type Tun struct {
+type tuntap struct {
+	name string
 	*os.File
+}
+
+func (t *tuntap) Name() string {
+	return t.name
 }

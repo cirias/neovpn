@@ -7,7 +7,7 @@ import (
 )
 
 func TestReadWrite(t *testing.T) {
-	ln, err := Listen("psk", "127.0.0.1:45645")
+	ln, err := Listen("psk", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -17,7 +17,8 @@ func TestReadWrite(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		conn, err := Dial("psk", "127.0.0.1:45645")
+		fmt.Println(ln.Addr().String())
+		conn, err := Dial("psk", ln.Addr().String())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -56,7 +57,7 @@ func TestReadWrite(t *testing.T) {
 }
 
 func TestWriteRead(t *testing.T) {
-	ln, err := Listen("psk", "127.0.0.1:45645")
+	ln, err := Listen("psk", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +67,7 @@ func TestWriteRead(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		conn, err := Dial("psk", "127.0.0.1:45645")
+		conn, err := Dial("psk", ln.Addr().String())
 		if err != nil {
 			t.Fatal(err)
 		}

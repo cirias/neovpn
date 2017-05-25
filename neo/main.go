@@ -2,117 +2,47 @@ package main
 
 import (
 	"flag"
-	"fmt"
-	"io"
 	"log"
 	"net"
 	"sync"
 )
 
 func main() {
-	var key, saddr, laddr string
+	var key, sAddr, lAddr, ipAddr string
 	flag.StringVar(&key, "key", "", "pre-shared key")
-	flag.StringVar(&saddr, "server", "", "server address for client mode")
-	flag.StringVar(&laddr, "listen", "", "listen address for server mode")
+	flag.StringVar(&sAddr, "server", "", "server address for client mode")
+	flag.StringVar(&lAddr, "listen", "", "listen address for server mode")
+	flag.StringVar(&ipAddr, "ip", "", "ip address in CIDR")
 	flag.Parse()
 
-	if saddr != "" {
-		client(key, saddr)
-	} else if laddr != "" {
-		server(key, laddr)
+	if sAddr != "" {
+		client(key, sAddr, ipAddr)
+	} else if lAddr != "" {
+		server(key, lAddr, ipAddr)
 	}
 }
 
-type connector struct {
-	lhs  io.ReadWriter
-	rhs  io.ReadWriter
-	done chan struct{}
-}
-
-func newConnector(lhs, rhs io.ReadWriter) *connector {
-	return &connector{
-		lhs:  lhs,
-		rhs:  rhs,
-		done: make(chan struct{}),
+func client(key, rAddr, ipAddr string) {
+	conn, err := Dial(key, rAddr)
+	if err != nil {
+		log.Fatalf("could not dial to %v@%v: %v\n", key, rAddr, err)
 	}
-}
+	defer func() { _ = conn.Close() }()
 
-func (c *connector) Close() {
-	close(c.done)
-}
-
-func (c *connector) Run() <-chan error {
-	var wg sync.WaitGroup
-
-	errCh := make(chan error)
-	defer func() {
-		wg.Wait()
-		close(errCh)
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		b := make([]byte, 65535)
-
-		for {
-			select {
-			case <-c.done:
-				return
-			default:
-			}
-
-			n, err := c.lhs.Read(b)
-			if err != nil {
-				errCh <- fmt.Errorf("could not read from lhs: %v", err)
-			}
-
-			_, err = c.rhs.Write(b[:n])
-			if err != nil {
-				errCh <- fmt.Errorf("could not write to rhs: %v", err)
-			}
-		}
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		b := make([]byte, 65535)
-
-		for {
-			select {
-			case <-c.done:
-				return
-			default:
-			}
-
-			n, err := c.rhs.Read(b)
-			if err != nil {
-				errCh <- fmt.Errorf("could not read from rhs: %v", err)
-			}
-
-			_, err = c.lhs.Write(b[:n])
-			if err != nil {
-				errCh <- fmt.Errorf("could not write to lhs: %v", err)
-			}
-		}
-	}()
-
-	return errCh
-}
-
-func client(key, address string) {
 	tun, err := newTun()
 	if err != nil {
 		log.Fatalf("could not new tun: %v\n", err)
 	}
 	defer func() { _ = tun.Close() }()
 
-	conn, err := Dial(key, address)
-	if err != nil {
-		log.Fatalf("could not dial to %v@%v: %v\n", key, address, err)
+	if err := ifUp(tun.Name(), ipAddr); err != nil {
+		log.Fatalf("could not turn up interface: %v", err)
 	}
-	defer func() { _ = conn.Close() }()
+	defer func() {
+		if err := ifDown(tun.Name(), ipAddr); err != nil {
+			log.Fatalf("could not turn down interface: %v", err)
+		}
+	}()
 
 	c := newConnector(tun, conn)
 	defer c.Close()
@@ -122,14 +52,23 @@ func client(key, address string) {
 	}
 }
 
-func server(key, address string) {
+func server(key, lAddr, ipAddr string) {
 	tun, err := newTun()
 	if err != nil {
 		log.Fatalln(err)
 	}
 	defer func() { _ = tun.Close() }()
 
-	ln, err := Listen(key, address)
+	if err := ifUp(tun.Name(), ipAddr); err != nil {
+		log.Fatalf("could not turn up interface: %v", err)
+	}
+	defer func() {
+		if err := ifDown(tun.Name(), ipAddr); err != nil {
+			log.Fatalf("could not turn down interface: %v", err)
+		}
+	}()
+
+	ln, err := Listen(key, lAddr)
 	if err != nil {
 		log.Fatalln(err)
 	}
