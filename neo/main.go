@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"sync"
@@ -12,35 +13,40 @@ func main() {
 	flag.StringVar(&key, "key", "", "pre-shared key")
 	flag.StringVar(&sAddr, "server", "", "server address for client mode")
 	flag.StringVar(&lAddr, "listen", "", "listen address for server mode")
-	flag.StringVar(&ipAddr, "ip", "", "ip address in CIDR")
+	flag.StringVar(&ipAddr, "ip", "", "ip address in CIDR for local interface")
 	flag.Parse()
 
 	if sAddr != "" {
-		client(key, sAddr, ipAddr)
+		if err := client(key, sAddr, ipAddr); err != nil {
+			log.Fatalln(err)
+		}
 	} else if lAddr != "" {
-		server(key, lAddr, ipAddr)
+		if err := server(key, lAddr, ipAddr); err != nil {
+			log.Fatalln(err)
+		}
 	}
 }
 
-func client(key, rAddr, ipAddr string) {
+func client(key, rAddr, ipAddr string) error {
 	conn, err := Dial(key, rAddr)
 	if err != nil {
-		log.Fatalf("could not dial to %v@%v: %v\n", key, rAddr, err)
+		return fmt.Errorf("could not dial to %v@%v: %v", key, rAddr, err)
 	}
 	defer func() { _ = conn.Close() }()
 
 	tun, err := newTun()
 	if err != nil {
-		log.Fatalf("could not new tun: %v\n", err)
+		return fmt.Errorf("could not new tun: %v", err)
 	}
 	defer func() { _ = tun.Close() }()
 
-	if err := ifUp(tun.Name(), ipAddr); err != nil {
-		log.Fatalf("could not turn up interface: %v", err)
+	down, err := up(tun.Name(), addIP(ipAddr))
+	if err != nil {
+		return fmt.Errorf("could not turn interface up: %v", err)
 	}
 	defer func() {
-		if err := ifDown(tun.Name(), ipAddr); err != nil {
-			log.Fatalf("could not turn down interface: %v", err)
+		if err := down(); err != nil {
+			log.Printf("could not turn interface down: %v\n", err)
 		}
 	}()
 
@@ -48,30 +54,34 @@ func client(key, rAddr, ipAddr string) {
 	defer c.Close()
 
 	for err := range c.Run() {
-		log.Fatalf("could not run: %v\n", err)
+		return fmt.Errorf("could not run: %v\n", err)
 	}
+
+	return nil
 }
 
-func server(key, lAddr, ipAddr string) {
+func server(key, lAddr, ipAddr string) error {
 	tun, err := newTun()
 	if err != nil {
-		log.Fatalln(err)
+		return fmt.Errorf("could not new tun: %v", err)
 	}
 	defer func() { _ = tun.Close() }()
 
-	if err := ifUp(tun.Name(), ipAddr); err != nil {
-		log.Fatalf("could not turn up interface: %v", err)
+	down, err := up(tun.Name(), addIP(ipAddr))
+	if err != nil {
+		return fmt.Errorf("could not turn interface up: %v", err)
 	}
 	defer func() {
-		if err := ifDown(tun.Name(), ipAddr); err != nil {
-			log.Fatalf("could not turn down interface: %v", err)
+		if err := down(); err != nil {
+			log.Printf("could not turn interface down: %v\n", err)
 		}
 	}()
 
 	ln, err := Listen(key, lAddr)
 	if err != nil {
-		log.Fatalln(err)
+		return fmt.Errorf("could not listen to %v@%v: %v", key, lAddr, err)
 	}
+	log.Printf("listening to %v@%v", key, lAddr)
 	defer func() { _ = ln.Close() }()
 
 	conns := make(map[[4]byte]net.Conn)
