@@ -24,7 +24,7 @@ services:
       - net1
     environment:
       - GODEBUG=netdns=cgo+1
-    command: /neo -key="psk" -server="server:9606" -ip="10.10.10.1/24"
+    command: bash -c 'sleep 1; /neo -key="psk" -server="server:9606" -ip="10.10.10.1/24"'
   client2:
     build: ../docker/image
     cap_add:
@@ -37,7 +37,7 @@ services:
       - net1
     environment:
       - GODEBUG=netdns=cgo+1
-    command: /neo -key="psk" -server="server:9606" -ip="10.10.10.2/24"
+    command: bash -c 'sleep 1; /neo -key="psk" -server="server:9606" -ip="10.10.10.2/24"'
   target:
     build: ../docker/image
     networks:
