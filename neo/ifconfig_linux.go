@@ -32,7 +32,7 @@ func up(ifName string, ops ...ifOption) (func() error, error) {
 			}
 		}
 
-		if err := execute(ipCommand, "link", "set", "dev", ifName, "up"); err != nil {
+		if err := execute(ipCommand, "link", "set", "dev", ifName, "down"); err != nil {
 			return err
 		}
 		return nil
