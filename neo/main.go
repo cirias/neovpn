@@ -50,11 +50,8 @@ func client(key, rAddr, ipAddr string) error {
 		}
 	}()
 
-	c := newConnector(tun, conn)
-	defer c.Close()
-
-	for err := range c.Run() {
-		return fmt.Errorf("could not run: %v\n", err)
+	if err := <-pipe(tun, conn); err != nil {
+		return fmt.Errorf("could not pipe tun and conn: %v\n", err)
 	}
 
 	return nil
