@@ -35,7 +35,7 @@ func client(key, rAddr, ipAddr string) error {
 	}
 	defer func() { _ = conn.Close() }()
 
-	crw, err := NewCryptoReadWriter(conn, key)
+	crw, err := newCryptoReadWriter(conn, key)
 	if err != nil {
 		return fmt.Errorf("could not new CryptoReadWriter: %v", err)
 	}
@@ -132,7 +132,7 @@ func server(key, lAddr, ipAddr string) error {
 			continue
 		}
 
-		crw, err := NewCryptoReadWriter(conn, key)
+		crw, err := newCryptoReadWriter(conn, key)
 		if err != nil {
 			log.Println(err)
 			continue

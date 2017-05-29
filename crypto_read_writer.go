@@ -10,55 +10,74 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 )
 
-type conn struct {
+type cryptoReadWriter struct {
 	gcm cipher.AEAD
 	rw  io.ReadWriter
 }
 
-func (c *conn) Read(b []byte) (int, error) {
+func newCryptoReadWriter(rw io.ReadWriter, key string) (io.ReadWriter, error) {
+	hash := sha256.Sum256([]byte(key))
+
+	block, err := aes.NewCipher(hash[:])
+	if err != nil {
+		return nil, fmt.Errorf("could not new cipher: %v", err)
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("could not new GCM: %v", err)
+	}
+
+	return &cryptoReadWriter{
+		gcm,
+		rw,
+	}, nil
+}
+
+func (c *cryptoReadWriter) Read(b []byte) (int, error) {
 	nonce := make([]byte, c.gcm.NonceSize())
 	_, err := io.ReadFull(c.rw, nonce)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("could not read nonce: %v", err)
 	}
 
 	var length uint16
 	err = binary.Read(c.rw, binary.BigEndian, &length)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("could not read length: %v", err)
 	}
 
 	if len(b) < int(length) {
-		return 0, errors.New("ctcp: insufficient buffer size, need " + fmt.Sprintf("%v", length))
+		return 0, errors.New("insufficient buffer size, need " + fmt.Sprintf("%v", length))
 	}
 
 	cipherbuf := make([]byte, length)
 	_, err = io.ReadFull(c.rw, cipherbuf)
 	if err != nil {
-		return 0, nil
+		return 0, fmt.Errorf("could not read cipherbuf: %v", err)
 	}
 
 	buf, err := c.gcm.Open(b[:0], nonce, cipherbuf, nil)
+	if err != nil {
+		return 0, fmt.Errorf("could not open cipherbuf: %v", err)
+	}
 
-	log.Println("conn.Read:", b[:len(buf)])
-	return len(buf), err
+	return len(buf), nil
 }
 
-func (c *conn) Write(b []byte) (int, error) {
-	log.Println("conn.Write:", b)
+func (c *cryptoReadWriter) Write(b []byte) (int, error) {
 	buf := new(bytes.Buffer)
 	nonce := make([]byte, c.gcm.NonceSize())
 	_, err := rand.Read(nonce)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("could not create random nonce: %v", err)
 	}
 
 	_, err = buf.Write(nonce)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("could not write nonce: %v", err)
 	}
 
 	cipherbuf := c.gcm.Seal(nil, nonce, b, nil)
@@ -66,35 +85,15 @@ func (c *conn) Write(b []byte) (int, error) {
 	length := uint16(len(cipherbuf))
 	err = binary.Write(buf, binary.BigEndian, length)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("could not write length: %v", err)
 	}
 
 	buf.Write(cipherbuf)
 
 	_, err = c.rw.Write(buf.Bytes())
+	if err != nil {
+		return 0, fmt.Errorf("could not write cipherbuf: %v", err)
+	}
 
 	return len(b), err
-}
-
-func newGCM(key string) (cipher.AEAD, error) {
-	hash := sha256.Sum256([]byte(key))
-
-	block, err := aes.NewCipher(hash[:])
-	if err != nil {
-		return nil, err
-	}
-
-	return cipher.NewGCM(block)
-}
-
-func NewCryptoReadWriter(rw io.ReadWriter, key string) (io.ReadWriter, error) {
-	gcm, err := newGCM(key)
-	if err != nil {
-		return nil, err
-	}
-
-	return &conn{
-		gcm,
-		rw,
-	}, nil
 }
