@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"sync"
@@ -28,11 +29,16 @@ func main() {
 }
 
 func client(key, rAddr, ipAddr string) error {
-	conn, err := Dial(key, rAddr)
+	conn, err := net.Dial("tcp", rAddr)
 	if err != nil {
 		return fmt.Errorf("could not dial to %v@%v: %v", key, rAddr, err)
 	}
 	defer func() { _ = conn.Close() }()
+
+	crw, err := NewCryptoReadWriter(conn, key)
+	if err != nil {
+		return fmt.Errorf("could not new CryptoReadWriter: %v", err)
+	}
 
 	tun, err := newTun()
 	if err != nil {
@@ -50,8 +56,8 @@ func client(key, rAddr, ipAddr string) error {
 		}
 	}()
 
-	if err := <-pipe(tun, conn); err != nil {
-		return fmt.Errorf("could not pipe tun and conn: %v\n", err)
+	if err := <-pipe(tun, crw); err != nil {
+		return fmt.Errorf("could not pipe tun and crw: %v\n", err)
 	}
 
 	return nil
@@ -74,15 +80,15 @@ func server(key, lAddr, ipAddr string) error {
 		}
 	}()
 
-	ln, err := Listen(key, lAddr)
+	ln, err := net.Listen("tcp", lAddr)
 	if err != nil {
 		return fmt.Errorf("could not listen to %v@%v: %v", key, lAddr, err)
 	}
 	log.Printf("listening to %v@%v", key, lAddr)
 	defer func() { _ = ln.Close() }()
 
-	conns := make(map[[4]byte]net.Conn)
-	var connsmtx sync.RWMutex
+	crws := make(map[[4]byte]io.ReadWriter)
+	var mtx sync.RWMutex
 
 	go func() {
 		var dst [4]byte
@@ -97,22 +103,22 @@ func server(key, lAddr, ipAddr string) error {
 			copy(dst[:], b[16:20])
 
 			if net.IPv4(dst[0], dst[1], dst[2], dst[3]).Equal(net.IPv4bcast) {
-				for _, conn := range conns {
-					if _, err := conn.Write(b[:n]); err != nil {
+				for _, crw := range crws {
+					if _, err := crw.Write(b[:n]); err != nil {
 						log.Println(err)
 					}
 				}
 			}
 
-			connsmtx.RLock()
-			conn, ok := conns[dst]
-			connsmtx.RUnlock()
+			mtx.RLock()
+			crw, ok := crws[dst]
+			mtx.RUnlock()
 			if !ok {
 				log.Println("not found: dst:", dst)
 				continue
 			}
 
-			_, err = conn.Write(b[:n])
+			_, err = crw.Write(b[:n])
 			if err != nil {
 				log.Println(err)
 			}
@@ -126,13 +132,19 @@ func server(key, lAddr, ipAddr string) error {
 			continue
 		}
 
+		crw, err := NewCryptoReadWriter(conn, key)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
 		go func() {
 			defer func() { _ = conn.Close() }()
 
 			var src [4]byte
 			for {
 				b := make([]byte, 65535)
-				n, err := conn.Read(b)
+				n, err := crw.Read(b)
 				if err != nil {
 					log.Println(err)
 					break
@@ -140,14 +152,14 @@ func server(key, lAddr, ipAddr string) error {
 
 				copy(src[:], b[12:16])
 
-				connsmtx.RLock()
-				storedConn, ok := conns[src]
-				connsmtx.RUnlock()
+				mtx.RLock()
+				stored, ok := crws[src]
+				mtx.RUnlock()
 
-				if !ok || storedConn != conn {
-					connsmtx.Lock()
-					conns[src] = conn
-					connsmtx.Unlock()
+				if !ok || stored != crw {
+					mtx.Lock()
+					crws[src] = crw
+					mtx.Unlock()
 				}
 
 				_, err = tun.Write(b[:n])

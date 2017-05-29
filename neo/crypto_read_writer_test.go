@@ -1,13 +1,15 @@
 package main
 
 import (
-	"fmt"
+	"net"
 	"sync"
 	"testing"
 )
 
+const key = "psk"
+
 func TestReadWrite(t *testing.T) {
-	ln, err := Listen("psk", "127.0.0.1:0")
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -17,20 +19,24 @@ func TestReadWrite(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		fmt.Println(ln.Addr().String())
-		conn, err := Dial("psk", ln.Addr().String())
+		conn, err := net.Dial("tcp", ln.Addr().String())
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer func() { _ = conn.Close() }()
 
-		b := make([]byte, 1024)
-		n, err := conn.Read(b)
+		rw, err := NewCryptoReadWriter(conn, "psk")
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if fmt.Sprintf("%s", b[:n]) != "hello world" {
+		b := make([]byte, 1024)
+		n, err := rw.Read(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if string(b[:n]) != "hello world" {
 			t.Error("received message should be same as sent")
 		}
 	}()
@@ -42,8 +48,13 @@ func TestReadWrite(t *testing.T) {
 		}
 		defer func() { _ = conn.Close() }()
 
+		rw, err := NewCryptoReadWriter(conn, "psk")
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		b := []byte("hello world")
-		n, err := conn.Write(b)
+		n, err := rw.Write(b)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -57,7 +68,7 @@ func TestReadWrite(t *testing.T) {
 }
 
 func TestWriteRead(t *testing.T) {
-	ln, err := Listen("psk", "127.0.0.1:0")
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,14 +78,19 @@ func TestWriteRead(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		conn, err := Dial("psk", ln.Addr().String())
+		conn, err := net.Dial("tcp", ln.Addr().String())
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer func() { _ = conn.Close() }()
 
+		rw, err := NewCryptoReadWriter(conn, "psk")
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		b := []byte("hello world")
-		n, err := conn.Write(b)
+		n, err := rw.Write(b)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -91,13 +107,18 @@ func TestWriteRead(t *testing.T) {
 		}
 		defer func() { _ = conn.Close() }()
 
-		b := make([]byte, 1024)
-		n, err := conn.Read(b)
+		rw, err := NewCryptoReadWriter(conn, "psk")
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if fmt.Sprintf("%s", b[:n]) != "hello world" {
+		b := make([]byte, 1024)
+		n, err := rw.Read(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if string(b[:n]) != "hello world" {
 			t.Error("received message should be same as sent")
 		}
 	}

@@ -10,23 +10,23 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
+	"log"
 )
 
 type conn struct {
 	gcm cipher.AEAD
-	*net.TCPConn
+	rw  io.ReadWriter
 }
 
 func (c *conn) Read(b []byte) (int, error) {
 	nonce := make([]byte, c.gcm.NonceSize())
-	_, err := io.ReadFull(c.TCPConn, nonce)
+	_, err := io.ReadFull(c.rw, nonce)
 	if err != nil {
 		return 0, err
 	}
 
 	var length uint16
-	err = binary.Read(c.TCPConn, binary.BigEndian, &length)
+	err = binary.Read(c.rw, binary.BigEndian, &length)
 	if err != nil {
 		return 0, err
 	}
@@ -36,17 +36,19 @@ func (c *conn) Read(b []byte) (int, error) {
 	}
 
 	cipherbuf := make([]byte, length)
-	_, err = io.ReadFull(c.TCPConn, cipherbuf)
+	_, err = io.ReadFull(c.rw, cipherbuf)
 	if err != nil {
 		return 0, nil
 	}
 
 	buf, err := c.gcm.Open(b[:0], nonce, cipherbuf, nil)
 
+	log.Println("conn.Read:", b[:len(buf)])
 	return len(buf), err
 }
 
 func (c *conn) Write(b []byte) (int, error) {
+	log.Println("conn.Write:", b)
 	buf := new(bytes.Buffer)
 	nonce := make([]byte, c.gcm.NonceSize())
 	_, err := rand.Read(nonce)
@@ -69,7 +71,7 @@ func (c *conn) Write(b []byte) (int, error) {
 
 	buf.Write(cipherbuf)
 
-	_, err = c.TCPConn.Write(buf.Bytes())
+	_, err = c.rw.Write(buf.Bytes())
 
 	return len(b), err
 }
@@ -85,53 +87,14 @@ func newGCM(key string) (cipher.AEAD, error) {
 	return cipher.NewGCM(block)
 }
 
-func Dial(key, address string) (net.Conn, error) {
+func NewCryptoReadWriter(rw io.ReadWriter, key string) (io.ReadWriter, error) {
 	gcm, err := newGCM(key)
-	if err != nil {
-		return nil, err
-	}
-
-	tcpconn, err := net.Dial("tcp", address)
 	if err != nil {
 		return nil, err
 	}
 
 	return &conn{
 		gcm,
-		tcpconn.(*net.TCPConn),
-	}, nil
-}
-
-type listener struct {
-	gcm cipher.AEAD
-	*net.TCPListener
-}
-
-func (ln *listener) Accept() (net.Conn, error) {
-	tcpconn, err := ln.AcceptTCP()
-	if err != nil {
-		return nil, err
-	}
-
-	return &conn{
-		ln.gcm,
-		tcpconn,
-	}, nil
-}
-
-func Listen(key, laddr string) (net.Listener, error) {
-	gcm, err := newGCM(key)
-	if err != nil {
-		return nil, err
-	}
-
-	tcpln, err := net.Listen("tcp", laddr)
-	if err != nil {
-		return nil, err
-	}
-
-	return &listener{
-		gcm,
-		tcpln.(*net.TCPListener),
+		rw,
 	}, nil
 }
