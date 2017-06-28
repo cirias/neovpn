@@ -14,10 +14,10 @@ import (
 
 type cryptoReadWriter struct {
 	gcm cipher.AEAD
-	rw  io.ReadWriter
+	rwc io.ReadWriteCloser
 }
 
-func newCryptoReadWriter(rw io.ReadWriter, key string) (io.ReadWriter, error) {
+func newCryptoReadWriter(rwc io.ReadWriteCloser, key string) (io.ReadWriter, error) {
 	hash := sha256.Sum256([]byte(key))
 
 	block, err := aes.NewCipher(hash[:])
@@ -32,19 +32,19 @@ func newCryptoReadWriter(rw io.ReadWriter, key string) (io.ReadWriter, error) {
 
 	return &cryptoReadWriter{
 		gcm,
-		rw,
+		rwc,
 	}, nil
 }
 
 func (c *cryptoReadWriter) Read(b []byte) (int, error) {
 	nonce := make([]byte, c.gcm.NonceSize())
-	_, err := io.ReadFull(c.rw, nonce)
+	_, err := io.ReadFull(c.rwc, nonce)
 	if err != nil {
 		return 0, fmt.Errorf("could not read nonce: %v", err)
 	}
 
 	var length uint16
-	err = binary.Read(c.rw, binary.BigEndian, &length)
+	err = binary.Read(c.rwc, binary.BigEndian, &length)
 	if err != nil {
 		return 0, fmt.Errorf("could not read length: %v", err)
 	}
@@ -54,7 +54,7 @@ func (c *cryptoReadWriter) Read(b []byte) (int, error) {
 	}
 
 	cipherbuf := make([]byte, length)
-	_, err = io.ReadFull(c.rw, cipherbuf)
+	_, err = io.ReadFull(c.rwc, cipherbuf)
 	if err != nil {
 		return 0, fmt.Errorf("could not read cipherbuf: %v", err)
 	}
@@ -90,10 +90,14 @@ func (c *cryptoReadWriter) Write(b []byte) (int, error) {
 
 	buf.Write(cipherbuf)
 
-	_, err = c.rw.Write(buf.Bytes())
+	_, err = c.rwc.Write(buf.Bytes())
 	if err != nil {
 		return 0, fmt.Errorf("could not write cipherbuf: %v", err)
 	}
 
 	return len(b), err
+}
+
+func (c *cryptoReadWriter) Close() error {
+	return c.rwc.Close()
 }

@@ -25,7 +25,7 @@ func execute(name string, arg ...string) error {
 }
 
 func up(ifName string, ops ...ifOption) (func() error, error) {
-	var down = func() error {
+	down := func() error {
 		for i := len(ops); i >= 0; i-- {
 			if err := ops[i].down(ifName); err != nil {
 				return err
@@ -52,11 +52,11 @@ func up(ifName string, ops ...ifOption) (func() error, error) {
 }
 
 func addIP(ipAddr string) ifOption {
-	var up = func(ifName string) error {
+	up := func(ifName string) error {
 		return execute(ipCommand, "addr", "add", ipAddr, "dev", ifName)
 	}
 
-	var down = func(ifName string) error {
+	down := func(ifName string) error {
 		return execute(ipCommand, "addr", "flush", "dev", ifName)
 	}
 
@@ -64,7 +64,7 @@ func addIP(ipAddr string) ifOption {
 }
 
 func addRoute(ipNet *net.IPNet, gw net.IP) ifOption {
-	var up = func(ifName string) error {
+	up := func(ifName string) error {
 		if gw != nil {
 			return execute(ipCommand, "route", "add", ipNet.String(), "via", gw.String(), "dev", ifName)
 		}
@@ -72,7 +72,7 @@ func addRoute(ipNet *net.IPNet, gw net.IP) ifOption {
 		return execute(ipCommand, "route", "add", ipNet.String(), "dev", ifName)
 	}
 
-	var down = func(ifName string) error {
+	down := func(ifName string) error {
 		if gw != nil {
 			return execute(ipCommand, "route", "del", ipNet.String(), "via", gw.String(), "dev", ifName)
 		}
