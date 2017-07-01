@@ -10,14 +10,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"time"
 )
 
-type cryptoReadWriter struct {
-	gcm cipher.AEAD
-	rwc io.ReadWriteCloser
+type cryptoConn struct {
+	gcm  cipher.AEAD
+	conn net.Conn
 }
 
-func newCryptoReadWriter(rwc io.ReadWriteCloser, key string) (io.ReadWriter, error) {
+func newCryptoConn(conn net.Conn, key string) (net.Conn, error) {
 	hash := sha256.Sum256([]byte(key))
 
 	block, err := aes.NewCipher(hash[:])
@@ -30,21 +32,21 @@ func newCryptoReadWriter(rwc io.ReadWriteCloser, key string) (io.ReadWriter, err
 		return nil, fmt.Errorf("could not new GCM: %v", err)
 	}
 
-	return &cryptoReadWriter{
+	return &cryptoConn{
 		gcm,
-		rwc,
+		conn,
 	}, nil
 }
 
-func (c *cryptoReadWriter) Read(b []byte) (int, error) {
+func (c *cryptoConn) Read(b []byte) (int, error) {
 	nonce := make([]byte, c.gcm.NonceSize())
-	_, err := io.ReadFull(c.rwc, nonce)
+	_, err := io.ReadFull(c.conn, nonce)
 	if err != nil {
 		return 0, fmt.Errorf("could not read nonce: %v", err)
 	}
 
 	var length uint16
-	err = binary.Read(c.rwc, binary.BigEndian, &length)
+	err = binary.Read(c.conn, binary.BigEndian, &length)
 	if err != nil {
 		return 0, fmt.Errorf("could not read length: %v", err)
 	}
@@ -54,7 +56,7 @@ func (c *cryptoReadWriter) Read(b []byte) (int, error) {
 	}
 
 	cipherbuf := make([]byte, length)
-	_, err = io.ReadFull(c.rwc, cipherbuf)
+	_, err = io.ReadFull(c.conn, cipherbuf)
 	if err != nil {
 		return 0, fmt.Errorf("could not read cipherbuf: %v", err)
 	}
@@ -67,7 +69,7 @@ func (c *cryptoReadWriter) Read(b []byte) (int, error) {
 	return len(buf), nil
 }
 
-func (c *cryptoReadWriter) Write(b []byte) (int, error) {
+func (c *cryptoConn) Write(b []byte) (int, error) {
 	buf := new(bytes.Buffer)
 	nonce := make([]byte, c.gcm.NonceSize())
 	_, err := rand.Read(nonce)
@@ -90,7 +92,7 @@ func (c *cryptoReadWriter) Write(b []byte) (int, error) {
 
 	buf.Write(cipherbuf)
 
-	_, err = c.rwc.Write(buf.Bytes())
+	_, err = c.conn.Write(buf.Bytes())
 	if err != nil {
 		return 0, fmt.Errorf("could not write cipherbuf: %v", err)
 	}
@@ -98,6 +100,26 @@ func (c *cryptoReadWriter) Write(b []byte) (int, error) {
 	return len(b), err
 }
 
-func (c *cryptoReadWriter) Close() error {
-	return c.rwc.Close()
+func (c *cryptoConn) Close() error {
+	return c.conn.Close()
+}
+
+func (c *cryptoConn) LocalAddr() net.Addr {
+	return c.conn.LocalAddr()
+}
+
+func (c *cryptoConn) RemoteAddr() net.Addr {
+	return c.conn.RemoteAddr()
+}
+
+func (c *cryptoConn) SetDeadline(t time.Time) error {
+	return c.conn.SetDeadline(t)
+}
+
+func (c *cryptoConn) SetWriteDeadline(t time.Time) error {
+	return c.conn.SetWriteDeadline(t)
+}
+
+func (c *cryptoConn) SetReadDeadline(t time.Time) error {
+	return c.conn.SetReadDeadline(t)
 }

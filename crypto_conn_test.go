@@ -25,7 +25,7 @@ func TestReadWrite(t *testing.T) {
 		}
 		defer func() { _ = conn.Close() }()
 
-		rw, err := newCryptoReadWriter(conn, "psk")
+		rw, err := newCryptoConn(conn, "psk")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -48,7 +48,7 @@ func TestReadWrite(t *testing.T) {
 		}
 		defer func() { _ = conn.Close() }()
 
-		rw, err := newCryptoReadWriter(conn, "psk")
+		rw, err := newCryptoConn(conn, "psk")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -84,7 +84,7 @@ func TestWriteRead(t *testing.T) {
 		}
 		defer func() { _ = conn.Close() }()
 
-		rw, err := newCryptoReadWriter(conn, "psk")
+		rw, err := newCryptoConn(conn, "psk")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -107,7 +107,7 @@ func TestWriteRead(t *testing.T) {
 		}
 		defer func() { _ = conn.Close() }()
 
-		rw, err := newCryptoReadWriter(conn, "psk")
+		rw, err := newCryptoConn(conn, "psk")
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -20,7 +20,7 @@ func newClient(key, rAddr, ipAddr string) (*client, error) {
 		return nil, fmt.Errorf("could not dial to %v@%v: %v", key, rAddr, err)
 	}
 
-	crw, err := newCryptoReadWriter(conn, key)
+	crw, err := newCryptoConn(conn, key)
 	if err != nil {
 		return nil, fmt.Errorf("could not new CryptoReadWriter: %v", err)
 	}
@@ -63,6 +63,10 @@ func (c *client) Close() error {
 
 	if err := c.conn.Close(); err != nil {
 		return fmt.Errorf("could not close conn: %v\n", err)
+	}
+
+	for _ = range c.errCh {
+
 	}
 
 	return nil
